@@ -3,5 +3,6 @@ Scripts/
 pyvenv.cfg
 Lib/
 sql_schema.dia
-__pycache__/
+Include/site/python3.12/greenlet/greenlet.h
 Include/
+__pycache__/settings.cpython-312.pyc
