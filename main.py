@@ -8,11 +8,13 @@ from sqlalchemy import insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql import func
-from models import English_Words,Russian_Words,Chats,History,Translation,create_talbes
+from sqlalchemy import insert
+from models import English_Words,Russian_Words,Chats,History,Translation,create_talbes,User_Words
 from settings import DBNAME,DBHOST,DBPASSWORD,DBPORT,DBUSER
+from datetime import datetime
 
 DSN = f"postgresql://{DBUSER}:{DBPASSWORD}@{DBHOST}:{DBPORT}/{DBNAME}"
-engine = sqlalchemy.create_engine(DSN)
+engine = sqlalchemy.create_engine(DSN, echo=True)
 create_talbes(engine)
 
 Session = sessionmaker(bind=engine)
@@ -20,6 +22,11 @@ session = Session()
 
 bot = telebot.TeleBot(TOKEN)
 state_storage = StateMemoryStorage()
+
+class Command:
+    ADD_WORD = 'Добавить слово ➕'
+    DELETE_WORD = 'Удалить слово🔙'
+    NEXT = 'Дальше ⏭'
 
 @bot.message_handler(commands=['help','start'])
 def send_welcome(message):
@@ -61,7 +68,10 @@ def get_words(message):
         keybord_words.append(target_word)
     session.commit()
 
-    query_other_words = session.query(English_Words.word).filter(English_Words.word != target_word).order_by(func.random()).limit(3)
+    query_other_words = session.query(English_Words.word).\
+        filter(English_Words.word != target_word).\
+            order_by(func.random()).limit(3)
+    
     keybord_words.extend([en.word for en in query_other_words])
     print(keybord_words)
     session.commit()
@@ -76,6 +86,8 @@ def create_buttons(word_list):
     buttons = []
     markup = types.ReplyKeyboardMarkup(row_width=2)
     buttons = [types.KeyboardButton(word) for word in word_list]
+    random.shuffle(buttons)
+    buttons.extend(mylist := [types.KeyboardButton(getattr(Command,x)) for x in dir(Command)[0:3]])   
     markup.add(*buttons)
     return markup
 
@@ -86,14 +98,51 @@ def check_answer(message,target_word,translate,markup):
         bot.send_message(message.chat.id, hint, reply_markup=markup)
         get_words(message)
         return
+    elif message.text == Command.NEXT:
+        next_word(message)
+    elif message.text == Command.ADD_WORD:
+        hint = f"""Для добавления нового слова введите слово и перевод 
+        через пробел. пример: Любовь Love"""
+        bot.send_message(message.chat.id, hint, reply_markup=markup)
+        bot.register_next_step_handler(message, add_word, markup)
+    elif message.text == Command.DELETE_WORD:
+        hint = f"""Для удаления слова введите слово. пример: Война"""
+        bot.send_message(message.chat.id, hint, reply_markup=markup)
+        bot.register_next_step_handler(message, del_word, markup)
     else:
         hint = f"Допущена ошибка! Попробуй ещё раз вспомнить слово 🇷🇺 {translate}!"
         bot.register_next_step_handler(message, check_answer, target_word,translate,markup)
         bot.send_message(message.chat.id, hint, reply_markup=markup)
-    
+
+@bot.message_handler(func=lambda message: message.text == Command.NEXT)
+def next_word(message):
+    get_words(message)
+
+@bot.message_handler(func=lambda message: message.text == Command.ADD_WORD)
+def add_word(message, markup):
+    splitted_str = message.text
+    russian_word, english_word = str(splitted_str).split(' ')
+    print(f'New word ru: {russian_word} en: {english_word}')
+    current_datetime = datetime.now()
+    insert_query = User_Words(chat_id=message.chat.id, ru_word=russian_word, en_word=english_word, created_at=current_datetime)
+    session.add(insert_query)
+    session.commit()
+    bot.send_message(message.chat.id, f"Слово {russian_word} успешно сохранено!", reply_markup=markup)
+    get_words(message)
+
+@bot.message_handler(func=lambda message: message.text == Command.DELETE_WORD)
+def del_word(message, markup):
+    delete_word = message.text
+    delete_query = session.query(User_Words).filter(User_Words.ru_word == delete_word).delete()
+    session.commit()
+    bot.send_message(message.chat.id, f"Слово {delete_word} успешно удалено!", reply_markup=markup)
+    get_words(message)
+
 session.close()
    
 if __name__ == '__main__':
     print('Бот запущен...')
     print('Для завершения нажмите Ctrl+C')
+    #bot.enable_save_next_step_handlers(delay=2)
+    #bot.load_next_step_handlers()
     bot.polling()
