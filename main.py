@@ -143,6 +143,4 @@ session.close()
 if __name__ == '__main__':
     print('Бот запущен...')
     print('Для завершения нажмите Ctrl+C')
-    #bot.enable_save_next_step_handlers(delay=2)
-    #bot.load_next_step_handlers()
     bot.polling()
