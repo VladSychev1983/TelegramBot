@@ -38,6 +38,3 @@ class History(Base):
 
 def create_talbes(engine):
     Base.metadata.create_all(engine)
-
-#селект 10 любых записей из таблицы.
-#SELECT * FROM your_table ORDER BY RAND() LIMIT 10;
