@@ -7,6 +7,7 @@ import sqlalchemy
 from sqlalchemy import insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import aliased
+from sqlalchemy.sql import func
 from models import English_Words,Russian_Words,Chats,History,Translation,create_talbes
 from settings import DBNAME,DBHOST,DBPASSWORD,DBPORT,DBUSER
 
@@ -47,8 +48,28 @@ def write_chat(message):
     
 def get_words(message):
     buttons = []
-    target_word = 'Peace'
-    translate = "Мир"
+    target_word, translate = ('','')
+    keybord_words = []
+    
+    ru = aliased(Russian_Words)
+    en = aliased(English_Words)
+    trans = aliased(Translation)
+
+    query_get_words  = session.query(en, trans, ru).\
+        join(trans, en.word_id == trans.en_word_id ).\
+        join(ru, trans.ru_word_id == ru.word_id).\
+        order_by(func.random()).limit(1).all()
+    for en,trans,ru in query_get_words:
+        target_word =  en.word
+        translate = ru.word
+        keybord_words.append(target_word)
+    session.commit()
+
+    query_other_words = session.query(English_Words.word).filter(English_Words.word != target_word).order_by(func.random()).limit(3)
+    keybord_words.extend([en.word for en in query_other_words])
+    print(keybord_words)
+    session.commit()
+
     markup = types.ReplyKeyboardMarkup(row_width=2)
     target_word_btn = types.KeyboardButton(target_word)
     buttons.append(target_word_btn)
@@ -56,7 +77,7 @@ def get_words(message):
 
     greeting = f"Выбери перевод слова:\n🇷🇺 {translate}"
     bot.send_message(message.chat.id, greeting, reply_markup=markup)
-    bot.register_next_step_handler(message, check_answer, target_word,translate,markup) 
+    bot.register_next_step_handler(message, check_answer, target_word,translate,markup)
 
 def check_answer(message,target_word,translate,markup):
     hint = ""
