@@ -26,10 +26,7 @@ def send_welcome(message):
     bot.reply_to(message, """
 Привет 👋 Давай попрактикуемся в английском языке. Тренировки можешь проходить в удобном для себя темпе.
 """)
-    #bot.register_next_step_handler(message, write_chat)     # <-- write new chat here.
-    chat_id = write_chat(message)
-    print(chat_id)
-    #bot.register_next_step_handler(message, get_words)                                            
+    chat_id = write_chat(message)                                            
     get_words(message)                                                      
                                                           
 def write_chat(message):
@@ -47,7 +44,6 @@ def write_chat(message):
         return new_user
     
 def get_words(message):
-    buttons = []
     target_word, translate = ('','')
     keybord_words = []
     
@@ -70,14 +66,18 @@ def get_words(message):
     print(keybord_words)
     session.commit()
 
-    markup = types.ReplyKeyboardMarkup(row_width=2)
-    target_word_btn = types.KeyboardButton(target_word)
-    buttons.append(target_word_btn)
-    markup.add(*buttons)
+    markup = create_buttons(keybord_words)
 
     greeting = f"Выбери перевод слова:\n🇷🇺 {translate}"
     bot.send_message(message.chat.id, greeting, reply_markup=markup)
     bot.register_next_step_handler(message, check_answer, target_word,translate,markup)
+
+def create_buttons(word_list):
+    buttons = []
+    markup = types.ReplyKeyboardMarkup(row_width=2)
+    buttons = [types.KeyboardButton(word) for word in word_list]
+    markup.add(*buttons)
+    return markup
 
 def check_answer(message,target_word,translate,markup):
     hint = ""
@@ -97,12 +97,3 @@ if __name__ == '__main__':
     print('Бот запущен...')
     print('Для завершения нажмите Ctrl+C')
     bot.polling()
-
-"""
-простой select в базу
-check_user = session.query(Chats).filter_by(chat_id=cid).first()
-
-простой insert в базу.
-new_user = Chats(chat_id=cid)       # <-- insert new user
-session.add(new_user)
-"""

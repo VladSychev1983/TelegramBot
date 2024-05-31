@@ -6,3 +6,4 @@ sql_schema.dia
 Include/site/python3.12/greenlet/greenlet.h
 Include/
 __pycache__/settings.cpython-312.pyc
+settings.py
