@@ -14,7 +14,7 @@ from settings import DBNAME,DBHOST,DBPASSWORD,DBPORT,DBUSER
 from datetime import datetime
 
 DSN = f"postgresql://{DBUSER}:{DBPASSWORD}@{DBHOST}:{DBPORT}/{DBNAME}"
-engine = sqlalchemy.create_engine(DSN, echo=True)
+engine = sqlalchemy.create_engine(DSN)
 create_talbes(engine)
 
 Session = sessionmaker(bind=engine)
@@ -27,6 +27,11 @@ class Command:
     ADD_WORD = 'Добавить слово ➕'
     DELETE_WORD = 'Удалить слово🔙'
     NEXT = 'Дальше ⏭'
+
+class MyStates(StatesGroup):
+    target_word = State()
+    translate_word = State()
+    another_words = State()
 
 @bot.message_handler(commands=['help','start'])
 def send_welcome(message):
@@ -57,7 +62,9 @@ def get_words(message):
     ru = aliased(Russian_Words)
     en = aliased(English_Words)
     trans = aliased(Translation)
+    userw = aliased(User_Words)
 
+    #Получаем слова общие для всех
     query_get_words  = session.query(en, trans, ru).\
         join(trans, en.word_id == trans.en_word_id ).\
         join(ru, trans.ru_word_id == ru.word_id).\
@@ -67,7 +74,22 @@ def get_words(message):
         translate = ru.word
         keybord_words.append(target_word)
     session.commit()
-
+    
+    #Получаем слова добавленные пользователем.
+    query_owner_words = session.query(User_Words.ru_word,User_Words.en_word).\
+        filter(User_Words.chat_id == write_chat(message)).\
+        order_by(func.random()).limit(1)
+    if val := (query_owner_words):
+            for userw.ru_word,userw.en_word in query_owner_words:
+                if isinstance(userw.ru_word, str):
+                    target_word = userw.en_word
+                    translate = userw.ru_word
+                    keybord_words.pop()
+                    keybord_words.append(target_word)
+                    print(f"Owner :{userw.ru_word} {userw.en_word}") 
+    session.commit()
+    
+    #Получаем слова для кнопок
     query_other_words = session.query(English_Words.word).\
         filter(English_Words.word != target_word).\
             order_by(func.random()).limit(3)
@@ -80,6 +102,13 @@ def get_words(message):
 
     greeting = f"Выбери перевод слова:\n🇷🇺 {translate}"
     bot.send_message(message.chat.id, greeting, reply_markup=markup)
+    
+    bot.set_state(message.from_user.id, MyStates.target_word, message.chat.id)
+    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
+        data['target_word'] = target_word
+        data['translate_word'] = translate
+        data['other_words'] = keybord_words
+    
     bot.register_next_step_handler(message, check_answer, target_word,translate,markup)
 
 def create_buttons(word_list):
@@ -143,4 +172,7 @@ session.close()
 if __name__ == '__main__':
     print('Бот запущен...')
     print('Для завершения нажмите Ctrl+C')
-    bot.polling()
+    bot.enable_save_next_step_handlers(delay=2)
+    bot.load_next_step_handlers()
+    bot.add_custom_filter(custom_filters.StateFilter(bot))
+    bot.infinity_polling()
